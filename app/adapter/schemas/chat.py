@@ -1,5 +1,32 @@
+from typing import List, Literal, Optional
 from pydantic import BaseModel
 
 class AskBody(BaseModel):
     question: str
-    session_id: str
+    user_id: str
+    chat_id: Optional[str] = None
+    session_id: Optional[str] = None
+
+
+class ChatSummary(BaseModel):
+    chat_id: str
+    title: str
+    updated_at: str
+    last_message_preview: Optional[str] = None
+
+
+class ChatListResponse(BaseModel):
+    items: List[ChatSummary]
+    last_evaluated_key: Optional[dict] = None
+
+
+class MessageDTO(BaseModel):
+    message_id: str
+    role: Literal["user","assistant","system"]
+    content: str
+    created_at: str
+
+
+class MessagesResponse(BaseModel):
+    items: List[MessageDTO]
+    last_evaluated_key: Optional[dict] = None
