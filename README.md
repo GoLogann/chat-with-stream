@@ -47,6 +47,7 @@ Crie um arquivo `.env` na raiz do projeto com suas credenciais AWS:
 
 ```env
 AWS_PROFILE=default
+AWS_ACCOUNT_ID=xxxyyy
 AWS_REGION=us-east-1
 BEDROCK_MODEL_ID=amazon.nova-micro-v1:0
 TEMPERATURE=0.3
