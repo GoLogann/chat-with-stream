@@ -30,7 +30,7 @@ async def index():
 
             html {
                 height: 100%;
-                overflow: hidden; /* Impede o scroll na página principal */
+                overflow: hidden;
             }
             
             body {
@@ -47,8 +47,8 @@ async def index():
                 display: flex;
                 flex-direction: column;
                 height: 100vh;
-                width: 95%; /* AUMENTADO: Usa 95% da largura da tela */
-                max-width: 2400px; /* AUMENTADO: Novo limite máximo bem largo */
+                width: 95%; 
+                max-width: 2400px; 
                 margin: 0 auto;
                 padding: 15px;
                 gap: 15px;
@@ -114,7 +114,7 @@ async def index():
                 display: flex;
                 gap: 25px;
                 flex: 1;
-                min-height: 0; /* Essencial para o layout flex funcionar corretamente */
+                min-height: 0; 
             }
             
             .sidebar {
@@ -183,19 +183,18 @@ async def index():
                 border-radius: 16px;
                 box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06);
                 border: 1px solid var(--border-color);
-                overflow: hidden; /* Garante que os filhos não ultrapassem a borda arredondada */
+                overflow: hidden;
             }
 
             #chat {
-                flex: 1; /* Ocupa todo o espaço vertical disponível */
+                flex: 1;
                 padding: 24px;
-                overflow-y: auto; /* A mágica acontece aqui: scroll apenas nesta div */
+                overflow-y: auto;
                 display: flex;
                 flex-direction: column;
                 gap: 16px;
             }
 
-            /* Estilo da barra de scroll */
             #chat::-webkit-scrollbar, .chat-list::-webkit-scrollbar { width: 6px; }
             #chat::-webkit-scrollbar-track, .chat-list::-webkit-scrollbar-track { background: transparent; }
             #chat::-webkit-scrollbar-thumb, .chat-list::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 3px; }
@@ -236,7 +235,7 @@ async def index():
                 .sidebar { width: 250px; }
             }
             @media (max-width: 768px) {
-                .container { padding: 10px; gap: 10px; width: 100%; /* Ocupa toda a largura em telas pequenas */ }
+                .container { padding: 10px; gap: 10px; width: 100%; }
                 .main-content { flex-direction: column; }
                 .sidebar { width: 100%; max-height: 35vh; padding: 16px; }
                 .header h2 { font-size: 22px; }
@@ -360,7 +359,6 @@ async def index():
                             div.innerHTML = marked.parse(m.content);
                             chatBox.appendChild(div);
                         });
-                        // Foca na última mensagem ao abrir o chat
                         chatBox.lastElementChild?.scrollIntoView({ behavior: 'auto', block: 'end' });
                     } else { chatBox.innerHTML = '<div class="empty-state">Este chat ainda não possui mensagens.</div>'; }
                 } catch (error) {
@@ -382,7 +380,6 @@ async def index():
                         });
                         if (!response.ok) { throw new Error('Falha ao atualizar o título na API.'); }
                         
-                        // Recarrega a lista para refletir a nova ordem
                         await refreshChatList();
                     } catch (error) {
                         console.error("Erro ao editar título:", error);
@@ -418,11 +415,9 @@ async def index():
                         }
                         lastMsg.dataset.rawText += data.text;
                         lastMsg.innerHTML = marked.parse(lastMsg.dataset.rawText);
-                        // Foco automático na mensagem sendo recebida
                         lastMsg.scrollIntoView({ behavior: 'auto', block: 'end' });
                     } else if (data.type === "end") {
                         typingIndicator.style.display = "none";
-                        // Se o chat não existia na lista, atualiza a lista
                         if (!document.querySelector(`.chat-list-item[data-chat-id="${currentChatId}"]`)) {
                              refreshChatList();
                         }
@@ -449,7 +444,6 @@ async def index():
                 div.innerHTML = marked.parse(q);
                 chatBox.appendChild(div);
                 
-                // Foco automático na mensagem enviada
                 div.scrollIntoView({ behavior: 'smooth', block: 'end' });
                 
                 qInput.value = "";
