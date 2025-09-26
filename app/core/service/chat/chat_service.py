@@ -1,14 +1,30 @@
+# app/core/service/chat/chat_service.py
+
 from __future__ import annotations
 from typing import AsyncIterator, Dict, Any
+import logging
 
 from app.core.service.llm.bedrock_service import BedrockChatService
 from app.domain.repositories.chat_repository import ChatRepository
 
+logger = logging.getLogger(__name__)
 
 class ChatService:
     def __init__(self, llm_service: BedrockChatService, repo: ChatRepository):
         self.llm_service = llm_service
         self.repo = repo
+        
+    def start_managed_session(self, user_id: str, chat_id: str) -> Dict[str, Any]:
+        active_sessions = self.repo.list_active_sessions_by_chat(chat_id=chat_id)
+        
+        for session in active_sessions.get("items", []):
+            if session.get("user_id") == user_id:
+                logger.warning(f"Encerrando sessão ativa órfã/concorrente: {session['session_id']}")
+                self.repo.end_session(user_id=user_id, session_id=session['session_id'])
+
+        logger.info(f"Iniciando nova sessão para o chat {chat_id}")
+        new_session = self.repo.start_session(user_id=user_id, chat_id=chat_id)
+        return new_session
 
     async def ask_stream(
         self,
@@ -18,21 +34,13 @@ class ChatService:
         chat_id: str | None = None,
         session_id: str | None = None,
     ) -> AsyncIterator[Dict[str, Any]]:
-        """
-        Orquestra todo o fluxo:
-        - cria chat/session se não existirem
-        - persiste pergunta
-        - stream da resposta
-        - persiste resposta
-        """
-
         if not chat_id:
             title = (question[:50] + '...') if len(question) > 50 else question
             chat = self.repo.create_chat(user_id=user_id, title=title)
             chat_id = chat["chat_id"]
 
         if not session_id:
-            sess = self.repo.start_session(user_id=user_id, chat_id=chat_id)
+            sess = self.start_managed_session(user_id=user_id, chat_id=chat_id)
             session_id = sess["session_id"]
 
         self.repo.append_message(chat_id=chat_id, user_id=user_id, role="user", content=question)
@@ -69,3 +77,6 @@ class ChatService:
 
     def update_chat_title(self, user_id: str, chat_id: str, new_title: str):
         self.repo.update_chat_title(user_id=user_id, chat_id=chat_id, new_title=new_title)
+    
+    def list_sessions(self, chat_id: str, limit: int = 50, cursor: dict | None = None):
+        return self.repo.list_sessions_by_chat(chat_id, limit, cursor)

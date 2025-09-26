@@ -33,3 +33,19 @@ class MessagesResponse(BaseModel):
 
 class UpdateTitlePayload(BaseModel):
     title: str = Field(..., min_length=1, max_length=100)
+    
+class SessionSummary(BaseModel):
+    session_id: str
+    chat_id: str
+    user_id: str
+    status: str
+    started_at: str
+    last_event_at: str
+    ended_at: Optional[str] = None
+
+class SessionListResponse(BaseModel):
+    items: List[SessionSummary]
+    last_evaluated_key: Optional[dict] = Field(None, alias="lastEvaluatedKey")
+
+    class Config:
+        allow_population_by_field_name = True

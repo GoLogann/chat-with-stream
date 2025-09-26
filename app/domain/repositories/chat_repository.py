@@ -19,7 +19,6 @@ class ChatRepository:
     def __init__(self, dynamo: DynamoClient):
         self.db = dynamo
 
-
     def create_chat(self, user_id: str, title: str) -> Dict[str, Any]:
         chat_id = str(uuid.uuid4())
         ts = now_iso()
@@ -36,67 +35,81 @@ class ChatRepository:
                 "last_message_preview": None,
             },
             "GSI1PK": f"USER#{user_id}",
-            "GSI1SK": f"CHAT#{ts}#{chat_id}", 
+            "GSI1SK": f"CHAT#{ts}#{chat_id}",
         }
         self.db.put(item)
         return item["data"]
 
-
     def get_chat(self, user_id: str, chat_id: str) -> Optional[Dict[str, Any]]:
         item = self.db.get(pk=f"USER#{user_id}", sk=f"CHAT#{chat_id}")
         return item.get("data") if item else None
-
-
+        
     def list_chats(self, user_id: str, limit: int = 20, last_key: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         params = {
             "IndexName": "GSI1",
             "KeyConditionExpression": Key("GSI1PK").eq(f"USER#{user_id}"),
-            "ScanIndexForward": False  
+            "ScanIndexForward": False
         }
         if limit:
             params["Limit"] = limit
         if last_key:
             params["ExclusiveStartKey"] = last_key
-            
         res = self.db.query(**params)
-        items = res.get("Items", []) 
-        
+        items = res.get("Items", [])
         return {
             "items": [i["data"] for i in items],
             "last_evaluated_key": res.get("LastEvaluatedKey")
         }
-    
-    
+
+    def list_sessions_by_chat(self, chat_id: str, limit: int = 50, last_key: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        params = {
+            "IndexName": "GSI3",
+            "KeyConditionExpression": Key("GSI3PK").eq(f"CHAT#{chat_id}"),
+            "ScanIndexForward": False,
+        }
+        if limit:
+            params["Limit"] = limit
+        if last_key:
+            params["ExclusiveStartKey"] = last_key
+        res = self.db.query(**params)
+        items = res.get("Items", [])
+        return {
+            "items": [i["data"] for i in items],
+            "last_evaluated_key": res.get("LastEvaluatedKey")
+        }
+        
+    def list_active_sessions_by_chat(self, chat_id: str) -> Dict[str, Any]:
+        params = {
+            "IndexName": "GSI3",
+            "KeyConditionExpression": Key("GSI3PK").eq(f"CHAT#{chat_id}") & Key("GSI3SK").begins_with("SESSION#active#"),
+        }
+        res = self.db.query(**params)
+        items = res.get("Items", [])
+        return {"items": [i["data"] for i in items]}
+
     def update_chat_preview_and_ts(self, user_id: str, chat_id: str, preview: str):
         ts = now_iso()
         key = {"PK": f"USER#{user_id}", "SK": f"CHAT#{chat_id}"}
         update_expr = (
             "SET #data.#updated_at = :u, "
-            "#data.#last_message_preview = :p"
+            "#data.#last_message_preview = :p, "
+            "GSI1SK = :g1"
         )
-        vals = {
-            ":u": ts,
-            ":p": preview,
-        }
+        vals = {":u": ts, ":p": preview, ":g1": f"CHAT#{ts}#{chat_id}"}
         names = {"#data": "data", "#updated_at": "updated_at", "#last_message_preview": "last_message_preview"}
         self.db.update(key, update_expr, vals, names)
-        
-        
+
     def update_chat_title(self, user_id: str, chat_id: str, new_title: str):
-        """Atualiza o título de um chat e seu timestamp de ordenação."""
         ts = now_iso()
         key = {"PK": f"USER#{user_id}", "SK": f"CHAT#{chat_id}"}
         update_expr = (
             "SET #data.#title = :t, "
-            "#data.#updated_at = :u"
+            "#data.#updated_at = :u, "
+            "GSI1SK = :g1"
         )
-        vals = {
-            ":t": new_title,
-            ":u": ts,
-        }
+        vals = {":t": new_title, ":u": ts, ":g1": f"CHAT#{ts}#{chat_id}"}
         names = {"#data": "data", "#title": "title", "#updated_at": "updated_at"}
         self.db.update(key, update_expr, vals, names)
-
 
     def append_message(self, chat_id: str, user_id: str, role: str, content: str, ttl: int = 0) -> Dict[str, Any]:
         msg_id = str(uuid.uuid4())
@@ -120,8 +133,7 @@ class ChatRepository:
             item["ttl"] = ttl
         self.db.put(item)
         return item["data"]
-    
-    
+
     def get_messages(self, chat_id: str, limit: int = 100, last_key: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         params = {
             "KeyConditionExpression": Key("PK").eq(f"CHAT#{chat_id}") & Key("SK").begins_with("MSG#"),
@@ -136,8 +148,7 @@ class ChatRepository:
             "items": [i["data"] for i in res.get("Items", [])],
             "last_evaluated_key": res.get("LastEvaluatedKey")
         }
-    
-    
+
     def start_session(self, user_id: str, chat_id: str) -> Dict[str, Any]:
         session_id = str(uuid.uuid4())
         ts = now_iso()
@@ -161,8 +172,7 @@ class ChatRepository:
         }
         self.db.put(item)
         return item["data"]
-    
-    
+
     def touch_session(self, user_id: str, session_id: str):
         ts = now_iso()
         key = {"PK": f"USER#{user_id}", "SK": f"SESSION#{session_id}"}
@@ -170,8 +180,7 @@ class ChatRepository:
         vals = {":t": ts}
         names = {"#data": "data", "#last_event_at": "last_event_at"}
         self.db.update(key, update_expr, vals, names)
-    
-    
+
     def end_session(self, user_id: str, session_id: str):
         ts = now_iso()
         key = {"PK": f"USER#{user_id}", "SK": f"SESSION#{session_id}"}
