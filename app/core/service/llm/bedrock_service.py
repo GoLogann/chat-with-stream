@@ -92,7 +92,6 @@ class BedrockChatService(BaseLangChainService):
                 elif ev_type == "on_chain_end" and ev_name == "RunnableWithMessageHistory":
                     output = event["data"].get("output")
                     if output:
-                        # texto final
                         if hasattr(output, "content"):
                             if isinstance(output.content, str):
                                 final_text = output.content
