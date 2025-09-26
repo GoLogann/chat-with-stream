@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import asyncio
 from typing import AsyncIterator, Dict, Any
 
 from langchain_aws import ChatBedrockConverse
@@ -44,40 +45,86 @@ class BedrockChatService(BaseLangChainService):
         self,
         prompt: str,
         session_id: str,
+        timeout: int = 60,
     ) -> AsyncIterator[Dict[str, Any]]:
         """
-        Faz stream do modelo, emitindo eventos:
+        Stream do modelo emitindo:
           {"type":"token","text": "..."}
-        No final, emite:
-          {"type":"end","usage":{...},"history_size": N}
+          {"type":"end","usage":{...},"history_size": N,"full_text":"..."}
+          {"type":"error","message":"..."}
         """
+
         llm = self.get_llm()
         chain: Runnable = self.create_prompt() | llm
         chain_hist = self._with_history(chain, session_id)
 
-        final_text_parts: list[str] = []
-
-        async for chunk in chain_hist.astream(
+        gen = chain_hist.astream_events(
             {"input": prompt},
             config={"configurable": {"session_id": session_id}},
-        ):
-            text_part = getattr(chunk, "content", None)
-            print(f"chunk  -> -> {text_part}")
+        )
 
-            if isinstance(text_part, str):
-                final_text_parts.append(text_part)
-                yield {"type": "token", "text": text_part}
+        try:
+            final_text = ""
+            usage = {}
 
-            elif isinstance(text_part, list):
-                for piece in text_part:
-                    if isinstance(piece, str):
-                        final_text_parts.append(piece)
-                        yield {"type": "token", "text": piece}
-                    elif isinstance(piece, dict) and "text" in piece:
-                        final_text_parts.append(piece["text"])
-                        yield {"type": "token", "text": piece["text"]}
+            while True:
+                try:
+                    event = await asyncio.wait_for(anext(gen), timeout=timeout)
+                except StopAsyncIteration:
+                    break
+
+                ev_type = event.get("event")
+                ev_name = event.get("name")
+
+                if ev_type == "on_chat_model_stream":
+                    chunk = event["data"]["chunk"]
+                    text_part = getattr(chunk, "content", None)
+
+                    if isinstance(text_part, str):
+                        yield {"type": "token", "text": text_part}
+                    elif isinstance(text_part, list):
+                        for piece in text_part:
+                            if isinstance(piece, str):
+                                yield {"type": "token", "text": piece}
+                            elif isinstance(piece, dict) and "text" in piece:
+                                yield {"type": "token", "text": piece["text"]}
+
+                elif ev_type == "on_chain_end" and ev_name == "RunnableWithMessageHistory":
+                    output = event["data"].get("output")
+                    if output:
+                        # texto final
+                        if hasattr(output, "content"):
+                            if isinstance(output.content, str):
+                                final_text = output.content
+                            elif isinstance(output.content, list):
+                                final_text = "".join(
+                                    part["text"]
+                                    for part in output.content
+                                    if isinstance(part, dict) and part.get("type") == "text"
+                                )
+
+                        usage_meta = getattr(output, "usage_metadata", None)
+                        if usage_meta:
+                            usage = {
+                                "input_tokens": usage_meta.get("input_tokens"),
+                                "output_tokens": usage_meta.get("output_tokens"),
+                                "total_tokens": usage_meta.get("total_tokens"),
+                            }
+
+        except asyncio.TimeoutError:
+            yield {"type": "error", "message": f"Timeout de {timeout}s atingido"}
+            return
+        except Exception as e:
+            logger.exception("Erro durante o streaming")
+            yield {"type": "error", "message": str(e)}
+            return
+
+        history = self._get_session_history(session_id)
+        history_size = len(getattr(history, "messages", []))
 
         yield {
             "type": "end",
-            "full_text": "".join(final_text_parts),
+            "usage": usage,
+            "history_size": history_size,
+            "full_text": final_text,
         }
