@@ -27,7 +27,8 @@ class ChatService:
         """
 
         if not chat_id:
-            chat = self.repo.create_chat(user_id=user_id, title="Novo chat")
+            title = (question[:50] + '...') if len(question) > 50 else question
+            chat = self.repo.create_chat(user_id=user_id, title=title)
             chat_id = chat["chat_id"]
 
         if not session_id:
