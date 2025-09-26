@@ -10,12 +10,14 @@ from langchain_core.runnables import Runnable
 
 from app.core.config import Settings
 from app.core.service.llm.base_langchain_service import BaseLangChainService
+from app.domain.repositories.chat_repository import ChatRepository
 
 logger = logging.getLogger(__name__)
 
 
 class BedrockChatService(BaseLangChainService):
-    def __init__(self, settings: Settings) -> None:
+    def __init__(self, settings: Settings, repo: ChatRepository) -> None:
+        super().__init__(repo)
         self.settings = settings
         if not self.settings.BEDROCK_MODEL_ID:
             raise RuntimeError("BEDROCK_MODEL_ID não configurado")
@@ -44,19 +46,20 @@ class BedrockChatService(BaseLangChainService):
     async def generate_response_with_stream(
         self,
         prompt: str,
+        chat_id: str,
         session_id: str,
         timeout: int = 60,
     ) -> AsyncIterator[Dict[str, Any]]:
         """
         Stream do modelo emitindo:
           {"type":"token","text": "..."}
-          {"type":"end","usage":{...},"history_size": N,"full_text":"..."}
+          {"type":"end","usage":{...},"full_text":"..."}
           {"type":"error","message":"..."}
         """
 
         llm = self.get_llm()
         chain: Runnable = self.create_prompt() | llm
-        chain_hist = self._with_history(chain, session_id)
+        chain_hist = self._with_history(chain, chat_id)
 
         gen = chain_hist.astream_events(
             {"input": prompt},
@@ -91,16 +94,15 @@ class BedrockChatService(BaseLangChainService):
 
                 elif ev_type == "on_chain_end" and ev_name == "RunnableWithMessageHistory":
                     output = event["data"].get("output")
-                    if output:
-                        if hasattr(output, "content"):
-                            if isinstance(output.content, str):
-                                final_text = output.content
-                            elif isinstance(output.content, list):
-                                final_text = "".join(
-                                    part["text"]
-                                    for part in output.content
-                                    if isinstance(part, dict) and part.get("type") == "text"
-                                )
+                    if output and hasattr(output, "content"):
+                        if isinstance(output.content, str):
+                            final_text = output.content
+                        elif isinstance(output.content, list):
+                            final_text = "".join(
+                                part["text"]
+                                for part in output.content
+                                if isinstance(part, dict) and part.get("type") == "text"
+                            )
 
                         usage_meta = getattr(output, "usage_metadata", None)
                         if usage_meta:
@@ -118,12 +120,8 @@ class BedrockChatService(BaseLangChainService):
             yield {"type": "error", "message": str(e)}
             return
 
-        history = self._get_session_history(session_id)
-        history_size = len(getattr(history, "messages", []))
-
         yield {
             "type": "end",
             "usage": usage,
-            "history_size": history_size,
             "full_text": final_text,
         }
