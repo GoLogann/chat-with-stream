@@ -13,13 +13,11 @@ class Container(containers.DeclarativeContainer):
 
     config = providers.Singleton(Settings)
 
-    # LLM / Bedrock
     bedrock_service = providers.Factory(
         BedrockChatService,
         settings=config
     )
 
-    # Caso de uso (fachada)
     chat_service = providers.Singleton(
         ChatService,
         llm_service=bedrock_service

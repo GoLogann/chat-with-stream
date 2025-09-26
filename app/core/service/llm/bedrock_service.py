@@ -51,7 +51,6 @@ class BedrockChatService(BaseLangChainService):
         No final, emite:
           {"type":"end","usage":{...},"history_size": N}
         """
-        # Instancia prompt + llm sem serializar o objeto (evita circular reference)
         llm = self.get_llm()
         chain: Runnable = self.create_prompt() | llm
         chain_hist = self._with_history(chain, session_id)
