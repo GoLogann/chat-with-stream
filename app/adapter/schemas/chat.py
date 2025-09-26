@@ -1,5 +1,5 @@
 from typing import List, Literal, Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 class AskBody(BaseModel):
     question: str
@@ -30,3 +30,6 @@ class MessageDTO(BaseModel):
 class MessagesResponse(BaseModel):
     items: List[MessageDTO]
     last_evaluated_key: Optional[dict] = None
+
+class UpdateTitlePayload(BaseModel):
+    title: str = Field(..., min_length=1, max_length=100)

@@ -36,26 +36,31 @@ class ChatRepository:
                 "last_message_preview": None,
             },
             "GSI1PK": f"USER#{user_id}",
-            "GSI1SK": f"CHAT#{ts}#{chat_id}",
+            "GSI1SK": f"CHAT#{ts}#{chat_id}", 
         }
         self.db.put(item)
         return item["data"]
+
 
     def get_chat(self, user_id: str, chat_id: str) -> Optional[Dict[str, Any]]:
         item = self.db.get(pk=f"USER#{user_id}", sk=f"CHAT#{chat_id}")
         return item.get("data") if item else None
 
+
     def list_chats(self, user_id: str, limit: int = 20, last_key: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         params = {
             "IndexName": "GSI1",
-            "KeyConditionExpression": Key("GSI1PK").eq(f"USER#{user_id}")
+            "KeyConditionExpression": Key("GSI1PK").eq(f"USER#{user_id}"),
+            "ScanIndexForward": False  
         }
         if limit:
             params["Limit"] = limit
         if last_key:
             params["ExclusiveStartKey"] = last_key
+            
         res = self.db.query(**params)
-        items = list(reversed(res.get("Items", [])))
+        items = res.get("Items", []) 
+        
         return {
             "items": [i["data"] for i in items],
             "last_evaluated_key": res.get("LastEvaluatedKey")
@@ -67,15 +72,29 @@ class ChatRepository:
         key = {"PK": f"USER#{user_id}", "SK": f"CHAT#{chat_id}"}
         update_expr = (
             "SET #data.#updated_at = :u, "
-            "#data.#last_message_preview = :p, "
-            "GSI1SK = :g1"
+            "#data.#last_message_preview = :p"
         )
         vals = {
             ":u": ts,
             ":p": preview,
-            ":g1": f"CHAT#{ts}#{chat_id}"
         }
         names = {"#data": "data", "#updated_at": "updated_at", "#last_message_preview": "last_message_preview"}
+        self.db.update(key, update_expr, vals, names)
+        
+        
+    def update_chat_title(self, user_id: str, chat_id: str, new_title: str):
+        """Atualiza o título de um chat e seu timestamp de ordenação."""
+        ts = now_iso()
+        key = {"PK": f"USER#{user_id}", "SK": f"CHAT#{chat_id}"}
+        update_expr = (
+            "SET #data.#title = :t, "
+            "#data.#updated_at = :u"
+        )
+        vals = {
+            ":t": new_title,
+            ":u": ts,
+        }
+        names = {"#data": "data", "#title": "title", "#updated_at": "updated_at"}
         self.db.update(key, update_expr, vals, names)
 
 

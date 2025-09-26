@@ -1,7 +1,7 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, status
 from dependency_injector.wiring import inject, Provide
 
-from app.adapter.schemas.chat import ChatListResponse, MessagesResponse, ChatSummary
+from app.adapter.schemas.chat import ChatListResponse, MessagesResponse, ChatSummary, UpdateTitlePayload
 from app.core.service.chat.chat_service import ChatService
 from app.container import Container
 
@@ -47,3 +47,19 @@ def get_messages(
         for i in res["items"]
     ]
     return MessagesResponse(items=items, last_evaluated_key=res.get("last_evaluated_key"))
+
+
+@router.patch("/{user_id}/{chat_id}/title", status_code=status.HTTP_204_NO_CONTENT)
+@inject
+def update_chat_title(
+    user_id: str,
+    chat_id: str,
+    payload: UpdateTitlePayload,
+    svc: ChatService = Depends(Provide[Container.chat_service])
+):
+    svc.update_chat_title(
+        user_id=user_id,
+        chat_id=chat_id,
+        new_title=payload.title
+    )
+    return

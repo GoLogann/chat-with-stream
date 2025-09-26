@@ -66,3 +66,6 @@ class ChatService:
 
     def history(self, chat_id: str, limit: int = 100, cursor: dict | None = None):
         return self.repo.get_messages(chat_id, limit, cursor)
+
+    def update_chat_title(self, user_id: str, chat_id: str, new_title: str):
+        self.repo.update_chat_title(user_id=user_id, chat_id=chat_id, new_title=new_title)
