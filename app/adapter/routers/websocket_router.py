@@ -20,20 +20,23 @@ async def chat_endpoint(
 ):
     await websocket.accept()
     used_sessions: set[str] = set()
+    user_id: str | None = None
 
     try:
         while True:
             raw_msg = await websocket.receive_text()
             data = json.loads(raw_msg)
-
             payload = AskBody(**data)
-            used_sessions.add(payload.session_id)
 
-            await websocket.send_json({"type": "start", "session_id": payload.session_id})
+            user_id = payload.user_id  
+            if payload.session_id:
+                used_sessions.add(payload.session_id)
 
             async for event in chat_service.ask_stream(
+                user_id=payload.user_id,
                 question=payload.question,
-                session_id=payload.session_id,
+                chat_id=payload.chat_id or None,
+                session_id=payload.session_id or None,
             ):
                 await websocket.send_json(event)
 
@@ -41,19 +44,13 @@ async def chat_endpoint(
         logger.info("Cliente desconectou do WS; encerrando sessões associadas...")
         for sid in list(used_sessions):
             try:
-                chat_service.end_session(sid)
+                chat_service.end_session(user_id, sid)
                 logger.info(f"Sessão encerrada (disconnect): {sid}")
             except Exception:
                 logger.exception(f"Falha ao encerrar sessão (disconnect): {sid}")
 
     except Exception as e:
         logger.exception("Erro no WS:")
-        for sid in list(used_sessions):
-            try:
-                chat_service.end_session(sid)
-                logger.info(f"Sessão encerrada (erro): {sid}")
-            except Exception:
-                logger.exception(f"Falha ao encerrar sessão (erro): {sid}")
         try:
             await websocket.send_json({"type": "error", "message": str(e)})
         except Exception:
